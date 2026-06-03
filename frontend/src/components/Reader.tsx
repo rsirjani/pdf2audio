@@ -278,9 +278,9 @@ export default function Reader({ project, docId }: Props) {
           if (cancelled) return;
           try {
             const data = JSON.parse(ev.data);
-            const t = data.type as typeof pipeline;
+            const t = String(data.type);
             if (t === "parsing" || t === "parsed" || t === "synthesizing") {
-              setPipeline(t);
+              setPipeline(t as typeof pipeline);
               if (data.data?.sentence_count) setSentenceCount(data.data.sentence_count);
             } else if (t === "done") {
               es?.close();
