@@ -226,12 +226,22 @@ def usage(user_id: str = Depends(require_user)):
     return limits.get_user_stats(user_id)
 
 
+def _is_complete(doc: Document) -> bool:
+    """A doc is 'complete' once TTS synthesis has run end-to-end.
+    During the brief parse-done / TTS-pending window the doc.json is checkpointed
+    on disk with total_duration_ms == 0 so partial work survives crashes; we hide
+    those from the user-facing library to avoid showing half-built audiobooks."""
+    return doc.total_duration_ms > 0
+
+
 @app.get("/api/projects", response_model=list[Project])
 def list_projects(user_id: str = Depends(require_user)):
     from datetime import datetime
     out = []
     for name in state.library.list_projects(user_id):
-        docs = state.library.list_documents(user_id, project=name)
+        docs = [d for d in state.library.list_documents(user_id, project=name) if _is_complete(d)]
+        if not docs:
+            continue
         total_ms = sum(d.total_duration_ms for d in docs)
         created = min((d.created_at for d in docs), default=datetime.utcnow())
         out.append(Project(name=name, user_id=user_id, doc_count=len(docs), total_duration_ms=total_ms, created_at=created))
@@ -241,7 +251,7 @@ def list_projects(user_id: str = Depends(require_user)):
 @app.get("/api/projects/{project}/docs", response_model=list[DocumentSummary])
 def list_docs(project: str, user_id: str = Depends(require_user)):
     project = _safe_name(project)
-    docs = state.library.list_documents(user_id, project=project)
+    docs = [d for d in state.library.list_documents(user_id, project=project) if _is_complete(d)]
     return [
         DocumentSummary(
             id=d.id,
@@ -258,7 +268,7 @@ def list_docs(project: str, user_id: str = Depends(require_user)):
 
 @app.get("/api/docs", response_model=list[DocumentSummary])
 def list_all_docs(user_id: str = Depends(require_user)):
-    docs = state.library.list_documents(user_id)
+    docs = [d for d in state.library.list_documents(user_id) if _is_complete(d)]
     return [
         DocumentSummary(
             id=d.id,
@@ -277,7 +287,9 @@ def list_all_docs(user_id: str = Depends(require_user)):
 def get_doc(project: str, doc_id: str, user_id: str = Depends(require_user)):
     project = _safe_name(project)
     doc = state.library.load_document(user_id, project, doc_id)
-    if doc is None:
+    if doc is None or not _is_complete(doc):
+        # 404 covers both "doesn't exist" and "still being generated" — clients should
+        # treat both as "not in the library" and surface progress via /api/jobs instead.
         raise HTTPException(404, "document not found")
     return doc
 

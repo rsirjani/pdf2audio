@@ -644,6 +644,41 @@ button.dl-btn {
   padding: 48px 24px;
 }
 
+.processing {
+  text-align: center;
+  padding: 80px 24px;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.processing-spinner {
+  width: 56px;
+  height: 56px;
+  border: 4px solid var(--surface1);
+  border-top-color: var(--mauve);
+  border-radius: 50%;
+  margin: 0 auto 28px;
+  animation: spin 1.1s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.processing-title {
+  font-size: 22px;
+  margin: 0 0 12px;
+  color: var(--mauve);
+  font-family: var(--font-sans);
+}
+
+.processing-sub {
+  color: var(--subtext1);
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0;
+}
+
 .equation-block {
   background: var(--surface0);
   border: 1px solid var(--surface1);

@@ -227,6 +227,8 @@ export default function Reader({ project, docId }: Props) {
     setTimeout(() => setOfflineStatus(null), 5000);
   }
 
+  const [stillProcessing, setStillProcessing] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -236,14 +238,17 @@ export default function Reader({ project, docId }: Props) {
         const d = await api.getDoc(project, docId);
         if (cancelled) return;
         setDoc(d);
-        // If the doc was opened mid-pipeline (parse done, TTS still running),
-        // total_duration_ms is 0 and audio sentences may be missing. Poll until
-        // synthesis finishes so the UI catches up without a manual refresh.
-        if (d && d.total_duration_ms === 0) {
+        setStillProcessing(false);
+      } catch (e: unknown) {
+        if (cancelled) return;
+        // Backend 404s for docs that are still being generated. Keep polling.
+        const msg = String((e as Error)?.message || "");
+        if (msg.includes("404")) {
+          setStillProcessing(true);
           timer = setTimeout(load, 5000);
+        } else {
+          console.error(e);
         }
-      } catch (e) {
-        console.error(e);
       }
     };
     load();
@@ -386,7 +391,22 @@ export default function Reader({ project, docId }: Props) {
     seekTo(frac * totalDuration, playing);
   }
 
-  if (!doc) return <div className="empty">loading…</div>;
+  if (!doc) {
+    if (stillProcessing) {
+      return (
+        <div className="processing">
+          <div className="processing-spinner" />
+          <h2 className="processing-title">Generating audio…</h2>
+          <p className="processing-sub">
+            We're parsing your PDF and narrating each sentence with Orpheus. This usually
+            takes a few minutes — long papers can take longer. You can close this tab and
+            check back later; the doc will appear in your library when it's ready.
+          </p>
+        </div>
+      );
+    }
+    return <div className="empty">loading…</div>;
+  }
 
   return (
     <>
