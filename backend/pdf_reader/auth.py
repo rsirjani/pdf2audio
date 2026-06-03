@@ -77,6 +77,36 @@ def verify_jwt(token: str) -> dict:
     )
 
 
+def _extract_jwt(request: Request) -> str | None:
+    """JWT can arrive two ways: as the Cf-Access-Jwt-Assertion header (CF injects it on
+    protected destinations) or as the CF_Authorization cookie (set on the user's browser
+    after sign-in, sent on every request to the protected domain — including paths the
+    application does NOT protect, like our public landing page)."""
+    token = request.headers.get("cf-access-jwt-assertion") or request.headers.get(
+        "Cf-Access-Jwt-Assertion"
+    )
+    if token:
+        return token
+    return request.cookies.get("CF_Authorization")
+
+
+def maybe_get_user(request: Request) -> str | None:
+    """Returns the user's verified email if a valid JWT is present anywhere, None otherwise.
+    Used by public endpoints like /whoami that want to render different UI for signed-in vs
+    anonymous users without 401-ing the page."""
+    if DEV_USER:
+        return DEV_USER
+    token = _extract_jwt(request)
+    if not token:
+        return None
+    try:
+        claims = verify_jwt(token)
+    except Exception:
+        return None
+    email = (claims.get("email") or "").lower()
+    return email or None
+
+
 def require_user(request: Request) -> str:
     """FastAPI dependency. Returns the verified user email (lowercased).
 
@@ -84,9 +114,7 @@ def require_user(request: Request) -> str:
     """
     if DEV_USER:
         return DEV_USER
-    token = request.headers.get("cf-access-jwt-assertion") or request.headers.get(
-        "Cf-Access-Jwt-Assertion"
-    )
+    token = _extract_jwt(request)
     if not token:
         raise HTTPException(401, "Missing Cloudflare Access JWT")
     try:

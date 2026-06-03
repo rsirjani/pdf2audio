@@ -128,7 +128,9 @@
     <a href="https://github.com/rsirjani/pdf2audio">GitHub</a>
     <a href="/terms.html">Terms</a>
     <a href="/privacy.html">Privacy</a>
-    <a href="/app/" class="signin-btn">Sign in</a>
+    <a id="auth-cta" href="/app/" class="signin-btn">Sign in</a>
+    <a id="signout-cta" href="/cdn-cgi/access/logout?returnTo=https://pdf2audio.ca/"
+       class="signin-btn" style="display:none; background:transparent; color:var(--subtext); border:1px solid var(--surface2)">Sign out</a>
   </div>
 </nav>
 
@@ -231,9 +233,9 @@
 </section>
 
 <div class="cta-block">
-  <h2>Ready to actually finish that reading list?</h2>
-  <p>Sign in with Google or a one-time PIN. Drop a PDF. Start listening.</p>
-  <a href="/app/" class="btn-primary">Sign in to start →</a>
+  <h2 id="cta-headline">Ready to actually finish that reading list?</h2>
+  <p id="cta-sub">Sign in with Google or a one-time PIN. Drop a PDF. Start listening.</p>
+  <a id="cta-btn" href="/app/" class="btn-primary">Sign in to start →</a>
 </div>
 
 <footer>
@@ -245,6 +247,37 @@
   </div>
   <div class="tiny">© 2026 Ramtin Sirjani · AGPL-3.0 · Powered by an RTX 5090 in a closet in Canada.</div>
 </footer>
+
+<script>
+  // Swap nav + hero CTA based on whether the visitor is signed in.
+  // /whoami sits at root and is NOT covered by the Cloudflare Access destinations,
+  // so this fetch works for both anonymous and signed-in visitors without redirecting.
+  (async () => {
+    try {
+      const r = await fetch('/whoami', { credentials: 'include', cache: 'no-store' });
+      if (!r.ok) return;
+      const me = await r.json();
+      if (!me.authenticated) return;
+      // Signed in — swap UI.
+      const auth = document.getElementById('auth-cta');
+      const signout = document.getElementById('signout-cta');
+      if (auth) auth.style.display = 'none';
+      if (signout) signout.style.display = 'inline-flex';
+      const head = document.getElementById('cta-headline');
+      const sub = document.getElementById('cta-sub');
+      const btn = document.getElementById('cta-btn');
+      const heroBtns = document.querySelectorAll('.cta-row a');
+      if (head) head.textContent = 'Welcome back, ' + (me.email || '');
+      if (sub) sub.textContent = "Your library's where you left it.";
+      if (btn) btn.textContent = 'Open your library →';
+      heroBtns.forEach((a) => {
+        if (a.classList.contains('btn-primary')) a.textContent = 'Open your library →';
+      });
+    } catch (_) {
+      /* no-op — landing stays in anonymous mode */
+    }
+  })();
+</script>
 
 </body>
 </html>

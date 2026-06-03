@@ -16,8 +16,10 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from fastapi import Request
+
 from . import limits
-from .auth import require_user
+from .auth import maybe_get_user, require_user
 from .library import DEFAULT_USER, Library, _safe_name
 from .schemas import Document, DocumentSummary, Project
 
@@ -186,6 +188,17 @@ class IngestResponse(BaseModel):
     doc_id: str | None = None
     project: str | None = None
     message: str | None = None
+
+
+@app.get("/whoami")
+def whoami(request: Request):
+    """Public endpoint. Returns whether the request is signed in, without 401-ing.
+
+    Sits at root (not /api/*) so it's NOT covered by the Cloudflare Access destination
+    rules — the landing page can call it to render different nav for signed-in vs
+    anonymous visitors."""
+    user_id = maybe_get_user(request)
+    return {"authenticated": user_id is not None, "email": user_id}
 
 
 @app.get("/api/health")
