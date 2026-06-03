@@ -1,0 +1,19 @@
+{
+  "name": "pdf-reader",
+  "short_name": "pdf-reader",
+  "description": "Read PDFs with synced TTS, offline-capable",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#1e1e2e",
+  "background_color": "#1e1e2e",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any maskable"
+    }
+  ]
+}

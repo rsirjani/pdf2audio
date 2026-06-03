@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+.env
+.env.*
+*.egg-info/
+.pytest_cache/
+
+# Node / Vite
+node_modules/
+dist/
+.parcel-cache/
+.vite/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*~
+
+# Data & secrets — NEVER commit these.
+data/
+pdf-reader-data/
+user_stats.json
+*.pem
+*.key
+cert.pem
+*.cloudflared*.json
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# Build / model artifacts
+*.safetensors
+*.bin
+*.wav
+*.mp3
+*.tar.gz
+*.tgz
+
+# Local launch scripts (machine-specific)
+launch_backend.sh
+deploy_parser.sh
+write_*.sh
+install_*.sh
+register-watcher.ps1
+wsl-keepalive-watch.*
+
+# Patches / one-offs
+patch_*.py
+migrate_to_users.py

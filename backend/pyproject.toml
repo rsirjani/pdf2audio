@@ -1,0 +1,31 @@
+[project]
+name = "pdf-reader-backend"
+version = "0.1.0"
+description = "PDF reader with structured parsing + Orpheus TTS for follow-along listening"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "python-multipart>=0.0.20",
+    "marker-pdf>=1.2",
+    "transformers>=4.45",
+    "torch>=2.4",
+    "snac>=1.2.1",
+    "soundfile>=0.12",
+    "numpy>=1.26",
+    "pydantic>=2.9",
+    "huggingface-hub>=0.26",
+    "accelerate>=1.0",
+    "bitsandbytes>=0.44",
+    "pysbd>=0.3.4",
+    "python-jose[cryptography]>=3.3",
+    "requests>=2.32",
+]
+
+[[tool.uv.index]]
+name = "pytorch-nightly-cu130"
+url = "https://download.pytorch.org/whl/nightly/cu130"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-nightly-cu130" }]
