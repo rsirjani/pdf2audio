@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<meta name="theme-color" content="#1e1e2e" />
+<title>pdf2audio — PDFs to follow-along audio</title>
+<link rel="icon" href="/static/icon-192.png" />
+<link rel="manifest" href="/static/manifest.webmanifest" />
+<style>
+  :root {
+    --bg: #1e1e2e; --bg2: #181825; --surface: #313244; --surface2: #45475a;
+    --text: #cdd6f4; --muted: #a6adc8; --blue: #89b4fa; --mauve: #cba6f7;
+    --green: #a6e3a1; --red: #f38ba8; --yellow: #f9e2af; --peach: #fab387;
+    --r: 12px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: "JetBrains Mono", "JetBrainsMono Nerd Font", ui-monospace, "Cascadia Mono",
+                 Menlo, Consolas, monospace;
+    font-size: 14px; }
+  body { padding: 24px; max-width: 980px; margin: 0 auto; }
+  .topline { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  h1 { font-size: 22px; margin: 0; font-weight: 600; color: var(--mauve); }
+  .who { font-size: 11px; color: var(--muted); }
+  .who a { color: var(--blue); text-decoration: none; }
+  .who a:hover { text-decoration: underline; }
+  .sub { color: var(--muted); margin-bottom: 20px; font-size: 12px; }
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+  label { color: var(--muted); font-size: 12px; }
+  input[type=text], select {
+    background: var(--surface); color: var(--text); border: 1px solid var(--surface2);
+    border-radius: var(--r); padding: 8px 12px; font: inherit; min-width: 220px;
+  }
+  input[type=text]:focus, select:focus { outline: none; border-color: var(--blue); }
+  button {
+    background: var(--blue); color: var(--bg); border: 0; border-radius: var(--r);
+    padding: 8px 14px; font: inherit; font-weight: 600; cursor: pointer;
+  }
+  button:hover { background: var(--mauve); }
+  button.ghost { background: var(--surface); color: var(--text); }
+  button.ghost:hover { background: var(--surface2); }
+  #drop {
+    border: 2px dashed var(--surface2); border-radius: var(--r);
+    padding: 56px 24px; text-align: center; color: var(--muted);
+    background: var(--bg2); transition: background .15s, border-color .15s, color .15s;
+    cursor: pointer; user-select: none;
+  }
+  #drop.hover { border-color: var(--blue); background: rgba(137,180,250,.08); color: var(--text); }
+  #drop strong { color: var(--text); }
+  #drop .hint { font-size: 12px; margin-top: 6px; color: var(--muted); }
+  #status { margin: 20px 0 6px; color: var(--muted); font-size: 12px; }
+  ul#jobs { list-style: none; margin: 0; padding: 0; }
+  ul#jobs li {
+    background: var(--surface); border-radius: var(--r);
+    padding: 12px 14px; margin-bottom: 8px;
+    display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; align-items: center;
+  }
+  .fname { font-weight: 500; word-break: break-all; }
+  .meta { color: var(--muted); font-size: 11px; grid-column: 1 / -1; }
+  .badge {
+    display: inline-block; padding: 2px 10px; border-radius: 999px;
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+  }
+  .b-queued { background: var(--surface2); color: var(--muted); }
+  .b-uploading { background: var(--peach); color: var(--bg); }
+  .b-parsing { background: var(--yellow); color: var(--bg); }
+  .b-synthesizing { background: var(--mauve); color: var(--bg); }
+  .b-done { background: var(--green); color: var(--bg); }
+  .b-error { background: var(--red); color: var(--bg); }
+  .doc-link { color: var(--blue); text-decoration: none; }
+  .doc-link:hover { text-decoration: underline; }
+  .err-msg { color: var(--red); font-size: 11px; grid-column: 1 / -1; }
+  .heart-btn {
+    background: transparent; color: var(--peach); border: 1px solid var(--surface2);
+    padding: 6px 10px; border-radius: 999px; font-size: 13px; cursor: pointer;
+  }
+  .heart-btn:hover { background: var(--surface); color: var(--peach); }
+  /* Modal */
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.65); backdrop-filter: blur(4px);
+                    display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+  .modal { background: var(--bg2); color: var(--text); border: 1px solid var(--surface2);
+           border-radius: 16px; padding: 28px; max-width: 460px; width: 100%; max-height: 90vh; overflow-y: auto;
+           position: relative; }
+  .modal-close { position: absolute; top: 12px; right: 12px; background: transparent; border: 0; color: var(--muted);
+                 font-size: 28px; cursor: pointer; line-height: 1; padding: 4px 10px; }
+  .about-hero { display: flex; align-items: center; gap: 16px; margin-bottom: 18px; }
+  .about-photo { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; border: 2px solid var(--mauve); }
+  .about-name { margin: 0; font-size: 20px; color: var(--mauve); }
+  .about-tag { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .about-body { font-size: 13px; line-height: 1.55; color: var(--text); margin-bottom: 18px; }
+  .kofi-btn { display: block; background: linear-gradient(135deg, #29abe0, #ff5e5b); color: #fff;
+              padding: 12px 22px; border-radius: 12px; text-decoration: none; font-weight: 600;
+              font-size: 14px; text-align: center; margin-bottom: 22px; }
+  .usage { background: var(--surface); border-radius: 12px; padding: 14px 16px; font-size: 12px; margin-bottom: 16px; }
+  .usage-row { display: flex; justify-content: space-between; margin-bottom: 6px; color: var(--muted); }
+  .usage-row .v { color: var(--text); }
+  .usage-bar { height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; margin-bottom: 10px; }
+  .usage-bar-fill { height: 100%; background: var(--mauve); }
+  .signout { display: block; text-align: center; margin-top: 8px; color: var(--red); text-decoration: none; font-size: 12px; }
+  .legal { font-size: 11px; color: var(--muted); text-align: center; }
+  .legal a { color: var(--muted); text-decoration: none; }
+  .legal a:hover { color: var(--mauve); text-decoration: underline; }
+</style>
+</head>
+<body>
+  <div class="topline">
+    <h1>pdf2audio</h1>
+    <div>
+      <span class="who" id="who"></span>
+      <button class="heart-btn" id="aboutBtn" title="About + tip jar">♥ About</button>
+    </div>
+  </div>
+  <div class="sub">drop PDFs → parse → narrate with Orpheus TTS → listen anywhere. <a href="/" style="color:var(--blue)">open library →</a></div>
+
+  <div class="row">
+    <label>project</label>
+    <select id="project"></select>
+    <input id="newproj" type="text" placeholder="or new project name…" style="min-width:200px" />
+    <button class="ghost" id="reload">refresh</button>
+  </div>
+
+  <div id="drop" tabindex="0">
+    <strong>drop PDFs here</strong> or click to pick
+    <div class="hint">multiple files OK · only .pdf accepted · up to 5 PDFs/day on the free tier</div>
+    <input id="picker" type="file" accept="application/pdf,.pdf" multiple hidden />
+  </div>
+
+  <div id="status">idle.</div>
+  <ul id="jobs"></ul>
+
+  <div id="aboutModal" style="display:none"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const drop = $('drop'), picker = $('picker'), jobsEl = $('jobs'), statusEl = $('status');
+const projectEl = $('project'), newprojEl = $('newproj');
+const KOFI_URL = window.PDF2AUDIO_KOFI_URL || 'https://ko-fi.com/rsirjani';
+const LS_PROJECT = 'pdfr.project';
+const savedProj = localStorage.getItem(LS_PROJECT) || '';
+const apiOrigin = window.location.origin;
+const api = (p) => apiOrigin + p;
+
+let me = null;
+async function loadMe() {
+  try {
+    const r = await fetch(api('/api/me'), { credentials: 'include' });
+    if (r.ok) {
+      me = await r.json();
+      $('who').textContent = me.email || '';
+    }
+  } catch (_) {}
+}
+
+async function loadProjects() {
+  projectEl.innerHTML = '<option value="">…loading…</option>';
+  try {
+    const r = await fetch(api('/api/projects'), { credentials: 'include' });
+    const list = await r.json();
+    projectEl.innerHTML = '';
+    if (!list.length) {
+      projectEl.innerHTML = '<option value="">(no projects yet — type a new one)</option>';
+    } else {
+      for (const p of list) {
+        const opt = document.createElement('option');
+        opt.value = p.name;
+        opt.textContent = `${p.name} (${p.doc_count})`;
+        projectEl.appendChild(opt);
+      }
+      const target = savedProj && [...projectEl.options].some(o => o.value === savedProj)
+        ? savedProj : projectEl.options[0].value;
+      projectEl.value = target;
+      localStorage.setItem(LS_PROJECT, target);
+    }
+    statusEl.textContent = `signed in. ${list.length} project(s).`;
+  } catch (e) {
+    statusEl.innerHTML = `<span style="color:var(--red)">backend unreachable: ${e.message}</span>`;
+  }
+}
+
+projectEl.addEventListener('change', () => localStorage.setItem(LS_PROJECT, projectEl.value));
+$('reload').addEventListener('click', loadProjects);
+$('aboutBtn').addEventListener('click', openAbout);
+
+function currentProject() {
+  return newprojEl.value.trim() || projectEl.value;
+}
+
+const jobs = new Map();
+function badge(s) { return `<span class="badge b-${s}">${s}</span>`; }
+
+function renderJob(j) {
+  if (!j.el) { j.el = document.createElement('li'); jobsEl.prepend(j.el); }
+  const link = j.doc_id && j.project
+    ? ` · <a class="doc-link" href="/#/project/${encodeURIComponent(j.project)}/doc/${j.doc_id}" target="_blank">open</a>`
+    : '';
+  j.el.innerHTML = `
+    <span class="fname">${j.file.name}</span>
+    ${badge(j.status)}
+    <span class="meta">project: ${j.project || '?'}${link}</span>
+    ${j.message ? `<div class="err-msg">${j.message}</div>` : ''}
+  `;
+}
+
+async function uploadFile(file) {
+  const project = currentProject();
+  if (!project) { alert('pick or type a project name first.'); return; }
+  const tempId = 'tmp_' + Math.random().toString(36).slice(2,10);
+  const j = { file, status: 'uploading', project, tempId };
+  jobs.set(tempId, j); renderJob(j);
+  try {
+    const fd = new FormData(); fd.append('file', file, file.name);
+    const r = await fetch(api(`/api/projects/${encodeURIComponent(project)}/ingest`), {
+      method: 'POST', body: fd, credentials: 'include',
+    });
+    if (!r.ok) {
+      const txt = await r.text();
+      throw new Error(`HTTP ${r.status} — ${txt}`);
+    }
+    const body = await r.json();
+    j.jobId = body.job_id;
+    j.status = body.status || 'queued';
+    jobs.delete(tempId); jobs.set(body.job_id, j);
+    renderJob(j);
+  } catch (e) {
+    j.status = 'error'; j.message = String(e); renderJob(j);
+  }
+}
+
+async function pollOnce() {
+  const pending = [...jobs.values()].filter(j => j.jobId && !['done','error'].includes(j.status));
+  if (!pending.length) return;
+  try {
+    const r = await fetch(api('/api/jobs'), { credentials: 'include' });
+    const all = await r.json();
+    const byId = new Map(all.map(x => [x.job_id, x]));
+    for (const j of pending) {
+      const rem = byId.get(j.jobId);
+      if (!rem) continue;
+      if (rem.status !== j.status || rem.doc_id !== j.doc_id || rem.message !== j.message) {
+        j.status = rem.status; j.doc_id = rem.doc_id; j.message = rem.message; j.project = rem.project || j.project;
+        renderJob(j);
+      }
+    }
+  } catch (_) {}
+}
+setInterval(pollOnce, 4000);
+
+drop.addEventListener('click', () => picker.click());
+drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') picker.click(); });
+picker.addEventListener('change', e => {
+  for (const f of e.target.files) if (f.name.toLowerCase().endsWith('.pdf')) uploadFile(f);
+  picker.value = '';
+});
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('hover'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('hover'));
+drop.addEventListener('drop', e => {
+  e.preventDefault(); drop.classList.remove('hover');
+  for (const f of [...(e.dataTransfer?.files || [])])
+    if (f.name.toLowerCase().endsWith('.pdf')) uploadFile(f);
+});
+
+function openAbout() {
+  const ab = $('aboutModal');
+  const storageMB = me?.storage_bytes ? (me.storage_bytes / 1024 / 1024).toFixed(1) : '0';
+  const storageLimit = me?.max_storage_mb ?? 0;
+  const pdfPct = me?.pdfs_per_day_limit ? Math.min(100, ((me?.pdfs_today ?? 0) / me.pdfs_per_day_limit) * 100) : 0;
+  const storagePct = storageLimit ? Math.min(100, ((me?.storage_bytes ?? 0) / (storageLimit * 1024 * 1024)) * 100) : 0;
+  ab.innerHTML = `
+    <div class="modal-backdrop" id="mb">
+      <div class="modal" onclick="event.stopPropagation()">
+        <button class="modal-close" id="cb">×</button>
+        <div class="about-hero">
+          <img src="/static/ramtin.jpg" alt="Ramtin Sirjani" class="about-photo" onerror="this.style.display='none'">
+          <div>
+            <h2 class="about-name">Ramtin Sirjani</h2>
+            <div class="about-tag">PhD student, Western University</div>
+          </div>
+        </div>
+        <p class="about-body">
+          <strong>pdf2audio</strong> turns academic PDFs into structured reading with high-quality follow-along narration.
+          Built and run on a personal GPU rig in my home office — every PDF you upload uses real electricity and GPU time.
+          If it helps you, a tip keeps the lights on.
+        </p>
+        <a class="kofi-btn" href="${KOFI_URL}" target="_blank" rel="noopener noreferrer">☕ Leave a tip on Ko-fi</a>
+        ${me ? `
+          <div class="usage">
+            <div class="usage-row"><span>Signed in as</span><span class="v">${me.email}</span></div>
+            <div class="usage-row"><span>PDFs today</span><span class="v">${me.pdfs_today ?? 0} / ${me.pdfs_per_day_limit}</span></div>
+            <div class="usage-bar"><div class="usage-bar-fill" style="width:${pdfPct}%"></div></div>
+            <div class="usage-row"><span>Storage</span><span class="v">${storageMB} MB / ${storageLimit} MB</span></div>
+            <div class="usage-bar"><div class="usage-bar-fill" style="width:${storagePct}%"></div></div>
+            <a class="signout" href="/cdn-cgi/access/logout">Sign out</a>
+          </div>` : ''}
+        <div class="legal">
+          <a href="/static/terms.html" target="_blank">Terms</a> ·
+          <a href="/static/privacy.html" target="_blank">Privacy</a> ·
+          <a href="https://github.com/RamtinSirjani/pdf2audio" target="_blank" rel="noopener noreferrer">Source on GitHub</a>
+        </div>
+      </div>
+    </div>`;
+  ab.style.display = '';
+  $('mb').addEventListener('click', () => { ab.style.display = 'none'; ab.innerHTML = ''; });
+  $('cb').addEventListener('click', () => { ab.style.display = 'none'; ab.innerHTML = ''; });
+}
+
+(async () => {
+  await loadMe();
+  await loadProjects();
+})();
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
