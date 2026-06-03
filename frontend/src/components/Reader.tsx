@@ -228,7 +228,29 @@ export default function Reader({ project, docId }: Props) {
   }
 
   useEffect(() => {
-    api.getDoc(project, docId).then(setDoc).catch(console.error);
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const load = async () => {
+      try {
+        const d = await api.getDoc(project, docId);
+        if (cancelled) return;
+        setDoc(d);
+        // If the doc was opened mid-pipeline (parse done, TTS still running),
+        // total_duration_ms is 0 and audio sentences may be missing. Poll until
+        // synthesis finishes so the UI catches up without a manual refresh.
+        if (d && d.total_duration_ms === 0) {
+          timer = setTimeout(load, 5000);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
   }, [project, docId]);
 
   const sentences: SentenceRef[] = useMemo(() => {
