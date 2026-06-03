@@ -665,6 +665,21 @@ button.dl-btn {
   to { transform: rotate(360deg); }
 }
 
+.processing-bar {
+  height: 8px;
+  background: var(--surface0);
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 0 0 22px;
+}
+
+.processing-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--mauve), var(--blue));
+  border-radius: 999px;
+  transition: width 0.6s cubic-bezier(0.45, 0, 0.55, 1);
+}
+
 .processing-title {
   font-size: 22px;
   margin: 0 0 12px;

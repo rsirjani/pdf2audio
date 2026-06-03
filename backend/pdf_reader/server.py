@@ -17,7 +17,9 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from fastapi import Request
+from fastapi.responses import StreamingResponse
 
+from . import events as _events
 from . import limits
 from .auth import maybe_get_user, require_user
 from .library import DEFAULT_USER, Library, _safe_name
@@ -114,11 +116,15 @@ def _ingest_worker_loop() -> None:
         for pdf_path, project, job_id, user_id in batch:
             try:
                 state.jobs[job_id] = {"status": "parsing", "filename": pdf_path.name, "project": project, "user_id": user_id}
+                _events.emit(job_id, "parsing")
                 doc = parse_doc(pdf_path, state.library, project=project, user_id=user_id)
+                state.jobs[job_id] = {"status": "parsed", "filename": pdf_path.name, "project": project, "user_id": user_id, "doc_id": doc.id}
+                _events.emit(job_id, "parsed", {"doc_id": doc.id, "title": doc.title, "sentence_count": sum(len(b.sentences) for b in doc.blocks)})
                 parsed.append((doc, job_id, project, user_id))
             except Exception as e:
                 log.exception("Parse failed for %s", pdf_path)
                 state.jobs[job_id] = {"status": "error", "message": f"parse: {e}", "filename": pdf_path.name, "project": project, "user_id": user_id}
+                _events.emit(job_id, "error", {"message": f"parse: {e}"})
 
         # Phase 2: load vLLM, synth all
         if parsed:
@@ -126,9 +132,12 @@ def _ingest_worker_loop() -> None:
             for doc, job_id, project, user_id in parsed:
                 pdf_name = state.jobs[job_id]["filename"]
                 try:
-                    state.jobs[job_id] = {"status": "synthesizing", "filename": pdf_name, "project": project, "user_id": user_id}
+                    sentence_count = sum(len(b.sentences) for b in doc.blocks)
+                    state.jobs[job_id] = {"status": "synthesizing", "filename": pdf_name, "project": project, "user_id": user_id, "doc_id": doc.id}
+                    _events.emit(job_id, "synthesizing", {"doc_id": doc.id, "sentence_count": sentence_count})
                     doc = synthesize_doc(doc, state.library, state.tts)
                     state.jobs[job_id] = {"status": "done", "doc_id": doc.id, "project": project, "filename": pdf_name, "user_id": user_id}
+                    _events.emit(job_id, "done", {"doc_id": doc.id, "project": project, "duration_ms": doc.total_duration_ms})
                     try:
                         limits.record_ingest(user_id, state.library.user_storage_bytes(user_id))
                     except Exception:
@@ -136,6 +145,7 @@ def _ingest_worker_loop() -> None:
                 except Exception as e:
                     log.exception("Synth failed for doc %s", doc.id)
                     state.jobs[job_id] = {"status": "error", "message": f"synth: {e}", "filename": pdf_name, "project": project, "user_id": user_id}
+                    _events.emit(job_id, "error", {"message": f"synth: {e}"})
 
         log.info("Ingest batch done; idling for next job")
 
@@ -459,6 +469,63 @@ def list_jobs(user_id: str = Depends(require_user)):
         for jid, j in state.jobs.items()
         if j.get("user_id") == user_id
     ]
+
+
+@app.get("/api/projects/{project}/docs/{doc_id}/job")
+def find_job_for_doc(project: str, doc_id: str, user_id: str = Depends(require_user)):
+    """Reader uses this to find the in-flight job for a doc it can't yet load
+    (because TTS is still running). Returns the job_id so the client can open
+    an SSE stream against /api/jobs/{job_id}/events."""
+    project = _safe_name(project)
+    for jid, j in state.jobs.items():
+        if j.get("user_id") != user_id:
+            continue
+        if j.get("project") != project:
+            continue
+        if j.get("doc_id") != doc_id:
+            continue
+        if j.get("status") in ("done", "error"):
+            continue
+        return {"job_id": jid, **j}
+    raise HTTPException(404, "no active job for this doc")
+
+
+@app.get("/api/jobs/{job_id}/events")
+def job_events(job_id: str, user_id: str = Depends(require_user)):
+    """Server-Sent Events stream for one job. Yields phase transitions
+    (queued → parsing → parsed → synthesizing → done | error) so the client
+    can render a real progress bar without polling."""
+    j = state.jobs.get(job_id)
+    if j and j.get("user_id") and j["user_id"] != user_id:
+        raise HTTPException(404, "job not found")
+    # Note: we don't 404 if job is missing — the job may have completed and been
+    # garbage-collected; the subscriber will receive replay history or close immediately.
+    q = _events.subscribe(job_id)
+
+    def gen():
+        try:
+            # Initial keepalive comment so the connection establishes quickly.
+            yield ": stream open\n\n"
+            while True:
+                try:
+                    ev = q.get(timeout=15)
+                except Exception:
+                    # Idle timeout — send a keepalive so proxies don't drop the connection.
+                    yield ": keep-alive\n\n"
+                    continue
+                if ev is _events.SENTINEL:
+                    yield "event: close\ndata: {}\n\n"
+                    break
+                yield _events.serialize_sse(ev)
+        finally:
+            _events.unsubscribe(job_id, q)
+            _events.cleanup(job_id)
+
+    return StreamingResponse(gen(), media_type="text/event-stream", headers={
+        "Cache-Control": "no-cache, no-transform",
+        "X-Accel-Buffering": "no",  # disables nginx buffering if present
+        "Connection": "keep-alive",
+    })
 
 
 # ---- Inbox watcher: drop PDFs in <inbox>/<project>/ to auto-ingest ----

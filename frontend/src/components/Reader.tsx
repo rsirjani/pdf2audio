@@ -227,34 +227,88 @@ export default function Reader({ project, docId }: Props) {
     setTimeout(() => setOfflineStatus(null), 5000);
   }
 
-  const [stillProcessing, setStillProcessing] = useState(false);
+  // Pipeline state while the doc is still being generated. Driven by SSE.
+  const [pipeline, setPipeline] = useState<"loading" | "queued" | "parsing" | "parsed" | "synthesizing" | "error" | "ready">("loading");
+  const [pipelineMsg, setPipelineMsg] = useState<string | null>(null);
+  const [sentenceCount, setSentenceCount] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
+    let es: EventSource | null = null;
+    let docLoadTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const load = async () => {
+    const loadDoc = async () => {
       try {
         const d = await api.getDoc(project, docId);
         if (cancelled) return;
         setDoc(d);
-        setStillProcessing(false);
+        setPipeline("ready");
       } catch (e: unknown) {
         if (cancelled) return;
-        // Backend 404s for docs that are still being generated. Keep polling.
         const msg = String((e as Error)?.message || "");
         if (msg.includes("404")) {
-          setStillProcessing(true);
-          timer = setTimeout(load, 5000);
+          // Doc isn't ready — find the in-flight job and subscribe to its event stream.
+          await subscribeToJob();
         } else {
           console.error(e);
         }
       }
     };
-    load();
+
+    const subscribeToJob = async () => {
+      try {
+        const r = await fetch(`/api/projects/${encodeURIComponent(project)}/docs/${docId}/job`, {
+          credentials: "include",
+        });
+        if (!r.ok) {
+          // No active job — doc probably doesn't exist at all, or finished + got GC'd.
+          // Retry the doc load once after a beat in case timing was racy.
+          docLoadTimer = setTimeout(loadDoc, 4000);
+          return;
+        }
+        const j = await r.json();
+        setPipeline((p) => (p === "loading" ? (j.status as typeof p) : p));
+        setSentenceCount(j.sentence_count ?? null);
+
+        // Open the SSE stream.
+        es = new EventSource(`/api/jobs/${encodeURIComponent(j.job_id)}/events`, {
+          withCredentials: true,
+        });
+        es.onmessage = (ev) => {
+          if (cancelled) return;
+          try {
+            const data = JSON.parse(ev.data);
+            const t = data.type as typeof pipeline;
+            if (t === "parsing" || t === "parsed" || t === "synthesizing") {
+              setPipeline(t);
+              if (data.data?.sentence_count) setSentenceCount(data.data.sentence_count);
+            } else if (t === "done") {
+              es?.close();
+              loadDoc(); // doc is ready — fetch it
+            } else if (t === "error") {
+              setPipeline("error");
+              setPipelineMsg(data.data?.message ?? "Processing failed.");
+              es?.close();
+            }
+          } catch (_) {
+            /* ignore malformed event */
+          }
+        };
+        es.addEventListener("close", () => es?.close());
+        es.onerror = () => {
+          // Network blip or the stream ended — try to reload the doc; if it's ready it'll succeed.
+          if (!cancelled) loadDoc();
+        };
+      } catch (e) {
+        console.error(e);
+      }
+    };
+
+    loadDoc();
     return () => {
       cancelled = true;
-      if (timer) clearTimeout(timer);
+      if (docLoadTimer) clearTimeout(docLoadTimer);
+      es?.close();
     };
   }, [project, docId]);
 
@@ -392,20 +446,45 @@ export default function Reader({ project, docId }: Props) {
   }
 
   if (!doc) {
-    if (stillProcessing) {
+    if (pipeline === "loading") {
+      return <div className="empty">loading…</div>;
+    }
+    if (pipeline === "error") {
       return (
         <div className="processing">
-          <div className="processing-spinner" />
-          <h2 className="processing-title">Generating audio…</h2>
-          <p className="processing-sub">
-            We're parsing your PDF and narrating each sentence with Orpheus. This usually
-            takes a few minutes — long papers can take longer. You can close this tab and
-            check back later; the doc will appear in your library when it's ready.
-          </p>
+          <h2 className="processing-title" style={{ color: "var(--red, #f38ba8)" }}>
+            Something went wrong
+          </h2>
+          <p className="processing-sub">{pipelineMsg ?? "The processing pipeline errored."}</p>
         </div>
       );
     }
-    return <div className="empty">loading…</div>;
+
+    // Four-step progress: queued (5%) → parsing (35%) → parsed (50%) → synthesizing (90%) → done.
+    const progress = pipeline === "queued" ? 5
+      : pipeline === "parsing" ? 35
+      : pipeline === "parsed" ? 50
+      : pipeline === "synthesizing" ? 90
+      : 100;
+    const label = pipeline === "queued" ? "Queued"
+      : pipeline === "parsing" ? "Parsing your PDF…"
+      : pipeline === "parsed" ? "Loading audio engine…"
+      : pipeline === "synthesizing"
+          ? (sentenceCount ? `Narrating ${sentenceCount} sentences…` : "Generating audio…")
+          : "Ready";
+
+    return (
+      <div className="processing">
+        <h2 className="processing-title">{label}</h2>
+        <div className="processing-bar">
+          <div className="processing-bar-fill" style={{ width: `${progress}%` }} />
+        </div>
+        <p className="processing-sub">
+          Long papers take longer. You can close this tab and come back — the doc will
+          appear in your library when it's ready.
+        </p>
+      </div>
+    );
   }
 
   return (
