@@ -50,6 +50,13 @@ export default function App() {
           <button className="about-btn" onClick={() => setShowAbout(true)} title="About + Tip jar">
             ♥
           </button>
+          <a
+            className="signout-btn"
+            href="/cdn-cgi/access/logout?returnTo=https://pdf2audio.ca/"
+            title="Sign out"
+          >
+            ↩
+          </a>
         </div>
       </div>
       {body}

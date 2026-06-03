@@ -450,6 +450,27 @@ button.dl-btn {
   background: var(--surface1);
 }
 
+.signout-btn {
+  background: transparent;
+  border: 1px solid var(--surface1);
+  color: var(--subtext1);
+  padding: 8px 14px;
+  font-size: 16px;
+  min-height: 40px;
+  min-width: 40px;
+  border-radius: 12px;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.signout-btn:hover {
+  background: var(--surface1);
+  color: var(--red, #f38ba8);
+}
+
 /* About / tip modal */
 .modal-backdrop {
   position: fixed;

@@ -461,7 +461,14 @@ def _watcher_loop():
 
 
 # ---- Static frontend (mounted last so /api/* still wins) ----
+# Layout:
+#   /            → marketing landing page (static/index.html), public via Cloudflare Access bypass
+#   /app/*       → React PWA (static/app/), protected by Cloudflare Access
+#   /<file>      → other static assets (pdf2audio.html uploader, terms.html, privacy.html, ramtin.jpg, …)
 if FRONTEND_DIR.exists():
-    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
+    app_dir = FRONTEND_DIR / "app"
+    if app_dir.exists():
+        app.mount("/app", StaticFiles(directory=str(app_dir), html=True), name="reader")
+    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="landing")
 else:
     log.warning("No frontend at %s — UI will 404", FRONTEND_DIR)

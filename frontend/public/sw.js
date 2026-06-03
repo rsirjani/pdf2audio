@@ -3,13 +3,14 @@
 //   - App shell (index.html, /assets/*, manifest, favicon): cache-first, refreshed on activate
 //   - Document assets (audio/markdown/pdf/mp3/images/json): network-first, cached on success
 //   - "PRECACHE_URLS" message from client: explicit bulk-cache for offline-save
-const VERSION = "v5";
+const VERSION = "v6";
 const SHELL_CACHE = `app-shell-${VERSION}`;
 const DOC_CACHE = `docs-${VERSION}`;
 
+// React PWA mounts at /app/ now; landing page lives at /.
 const SHELL_URLS = [
-  "/",
-  "/index.html",
+  "/app/",
+  "/app/index.html",
   "/manifest.json",
   "/favicon.svg",
 ];

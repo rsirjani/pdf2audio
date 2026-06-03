@@ -86,18 +86,18 @@ export default function AboutPanel({ onClose }: { onClose: () => void }) {
             <div className="usage-bar">
               <div className="usage-bar-fill" style={{ width: `${storagePct}%` }} />
             </div>
-            <a className="signout" href="/cdn-cgi/access/logout">
+            <a className="signout" href="/cdn-cgi/access/logout?returnTo=https://pdf2audio.ca/">
               Sign out
             </a>
           </div>
         )}
 
         <div className="legal">
-          <a href="/static/terms.html" target="_blank" rel="noopener noreferrer">
+          <a href="/terms.html" target="_blank" rel="noopener noreferrer">
             Terms
           </a>{" "}
           ·{" "}
-          <a href="/static/privacy.html" target="_blank" rel="noopener noreferrer">
+          <a href="/privacy.html" target="_blank" rel="noopener noreferrer">
             Privacy
           </a>{" "}
           ·{" "}
