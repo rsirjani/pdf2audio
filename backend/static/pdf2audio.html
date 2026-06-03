@@ -304,9 +304,31 @@ function openAbout() {
   $('cb').addEventListener('click', () => { ab.style.display = 'none'; ab.innerHTML = ''; });
 }
 
+async function bootstrapJobs() {
+  // Pick up any in-flight uploads from previous sessions so badges aren't lost on refresh.
+  try {
+    const r = await fetch(api('/api/jobs'), { credentials: 'include' });
+    if (!r.ok) return;
+    const all = await r.json();
+    for (const rem of all) {
+      if (['done', 'error'].includes(rem.status)) continue;
+      jobs.set(rem.job_id, {
+        file: { name: rem.filename || rem.job_id },
+        status: rem.status,
+        project: rem.project,
+        jobId: rem.job_id,
+        doc_id: rem.doc_id,
+        message: rem.message,
+      });
+      renderJob(jobs.get(rem.job_id));
+    }
+  } catch (_) {}
+}
+
 (async () => {
   await loadMe();
   await loadProjects();
+  await bootstrapJobs();
 })();
 
 if ('serviceWorker' in navigator) {
