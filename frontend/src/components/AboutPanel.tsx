@@ -27,7 +27,7 @@ export default function AboutPanel({ onClose }: { onClose: () => void }) {
     ? Math.min(100, ((me?.storage_bytes ?? 0) / (storageLimit * 1024 * 1024)) * 100)
     : 0;
 
-  const KOFI = (window as any).PDF2AUDIO_KOFI_URL || "https://ko-fi.com/REPLACE-ME";
+  const KOFI = (window as any).PDF2AUDIO_KOFI_URL || "https://ko-fi.com/rsirjani";
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
