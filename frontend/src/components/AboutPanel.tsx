@@ -55,11 +55,11 @@ export default function AboutPanel({ onClose }: { onClose: () => void }) {
           <strong>pdf2audio</strong> turns academic PDFs into structured reading
           with high-quality follow-along narration. Built and run on a personal GPU
           rig in my home office — every PDF you upload uses real electricity and GPU
-          time. If it helps you, a small contribution keeps the lights on.
+          time. If it helps you, a tip keeps the lights on.
         </p>
 
         <a className="kofi-btn" href={KOFI} target="_blank" rel="noopener noreferrer">
-          ☕ Support on Ko-fi
+          ☕ Leave a tip on Ko-fi
         </a>
 
         {me?.email && (

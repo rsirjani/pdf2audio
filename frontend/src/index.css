@@ -450,7 +450,7 @@ button.dl-btn {
   background: var(--surface1);
 }
 
-/* About / donate modal */
+/* About / tip modal */
 .modal-backdrop {
   position: fixed;
   inset: 0;

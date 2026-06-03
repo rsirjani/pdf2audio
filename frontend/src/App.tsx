@@ -47,7 +47,7 @@ export default function App() {
               ← back
             </button>
           )}
-          <button className="about-btn" onClick={() => setShowAbout(true)} title="About + Donate">
+          <button className="about-btn" onClick={() => setShowAbout(true)} title="About + Tip jar">
             ♥
           </button>
         </div>

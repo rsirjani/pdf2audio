@@ -2,7 +2,7 @@
 
 Turn academic PDFs into structured reading + high-quality follow-along audio.
 
-Live service: **[pdf2audio.ca](https://pdf2audio.ca)** — operated by [Ramtin Sirjani](mailto:ramtin.sirjani@gmail.com), PhD student at Western University. Built on personal GPU hardware. Donations: [Ko-fi](https://ko-fi.com/rsirjani).
+Live service: **[pdf2audio.ca](https://pdf2audio.ca)** — operated by [Ramtin Sirjani](mailto:ramtin.sirjani@gmail.com), PhD student at Western University. Built on personal GPU hardware. Tip jar: [Ko-fi](https://ko-fi.com/rsirjani).
 
 ## What it does
 
