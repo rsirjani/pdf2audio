@@ -157,44 +157,6 @@ interface SentenceRef {
   blockIdx: number;
 }
 
-async function precacheDoc(
-  doc: Document,
-  project: string,
-  docId: string,
-  onProgress: (done: number, total: number) => void
-): Promise<{ done: number; failed: number; total: number }> {
-  // Cache directly via Cache API — works even if SW isn't controlling the page yet.
-  const urls: string[] = [
-    `/api/projects/${encodeURIComponent(project)}/docs/${docId}`,
-    api.markdownUrl(project, docId),
-    api.audiobookUrl(project, docId),
-  ];
-  for (const b of doc.blocks) {
-    if (b.type === "image" && b.image_path) {
-      urls.push(api.imageUrl(project, docId, b.image_path));
-    }
-  }
-
-  const cache = await caches.open("docs-v5");
-  let done = 0;
-  let failed = 0;
-  for (const u of urls) {
-    try {
-      const res = await fetch(u);
-      if (res.ok) {
-        await cache.put(u, res.clone());
-        done++;
-      } else {
-        failed++;
-      }
-    } catch {
-      failed++;
-    }
-    onProgress(done + failed, urls.length);
-  }
-  return { done, failed, total: urls.length };
-}
-
 function fmtTime(sec: number): string {
   const total = Math.max(0, Math.round(sec));
   const h = Math.floor(total / 3600);
