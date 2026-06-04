@@ -213,18 +213,19 @@ export default function Reader({ project, docId }: Props) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const activeElRef = useRef<HTMLSpanElement | null>(null);
 
-  async function saveOffline() {
+  function downloadAudiobook() {
     if (!doc) return;
-    setOfflineStatus("starting…");
-    const result = await precacheDoc(doc, project, docId, (done, total) => {
-      setOfflineStatus(`${done}/${total}`);
-    });
-    if (result.failed === 0) {
-      setOfflineStatus(`✓ saved (${result.done} files)`);
-    } else {
-      setOfflineStatus(`saved ${result.done}, failed ${result.failed}`);
-    }
-    setTimeout(() => setOfflineStatus(null), 5000);
+    setOfflineStatus("downloading…");
+    const safeName = (doc.title || docId).replace(/[\\/:*?"<>|]+/g, " ").trim().slice(0, 120);
+    const a = document.createElement("a");
+    a.href = api.audiobookUrl(project, docId);
+    a.download = `${safeName}.mp3`;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setOfflineStatus("✓ download started — check your Downloads folder");
+    setTimeout(() => setOfflineStatus(null), 4000);
   }
 
   // Pipeline state while the doc is still being generated. Driven by SSE.
@@ -284,7 +285,16 @@ export default function Reader({ project, docId }: Props) {
               if (data.data?.sentence_count) setSentenceCount(data.data.sentence_count);
             } else if (t === "done") {
               es?.close();
-              loadDoc(); // doc is ready — fetch it
+              // Doc is ready — fetch it AND auto-download the MP3 to the user's device
+              // so they have their copy regardless of what we do with the server-side files.
+              loadDoc();
+              const a = document.createElement("a");
+              a.href = api.audiobookUrl(project, docId);
+              a.download = `${docId}.mp3`; // server's content-disposition will improve this name
+              a.rel = "noopener";
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
             } else if (t === "error") {
               setPipeline("error");
               setPipelineMsg(data.data?.message ?? "Processing failed.");
@@ -493,8 +503,8 @@ export default function Reader({ project, docId }: Props) {
         <h1 className="doc-title">{doc.title}</h1>
 
         <div className="download-bar">
-          <button className="dl-btn save-btn" onClick={saveOffline}>
-            💾 Save offline
+          <button className="dl-btn save-btn" onClick={downloadAudiobook}>
+            ⬇ Download MP3
           </button>
           {offlineStatus && <span className="offline-status">{offlineStatus}</span>}
         </div>
