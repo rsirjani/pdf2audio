@@ -41,10 +41,51 @@ else:
     OrpheusTTS = None
 
 
+class _PersistentJobs(dict):
+    """state.jobs but writes through to <data_root>/jobs.json so finished/in-flight
+    jobs survive a backend restart (we had several reports of "stuck on queued"
+    after NordVPN cycled the WSL networking and systemd restarted us)."""
+
+    _path: "Path | None" = None
+    _lock = threading.Lock()
+
+    def bind(self, path: "Path") -> None:
+        self._path = path
+        if path.exists():
+            try:
+                self.update(json.loads(path.read_text()))
+            except Exception as e:
+                log.warning("Could not load jobs.json: %s — starting fresh", e)
+
+    def _flush(self) -> None:
+        if self._path is None:
+            return
+        try:
+            with self._lock:
+                tmp = self._path.with_suffix(".tmp")
+                tmp.write_text(json.dumps(dict(self), indent=2))
+                tmp.replace(self._path)
+        except Exception as e:
+            log.warning("Could not persist jobs.json: %s", e)
+
+    def __setitem__(self, key, value) -> None:
+        super().__setitem__(key, value)
+        self._flush()
+
+    def __delitem__(self, key) -> None:
+        super().__delitem__(key)
+        self._flush()
+
+    def pop(self, *args, **kwargs):
+        v = super().pop(*args, **kwargs)
+        self._flush()
+        return v
+
+
 class AppState:
     library: Library | None = None
     tts: OrpheusTTS | None = None
-    jobs: dict[str, dict] = {}
+    jobs: _PersistentJobs = _PersistentJobs()
     watcher_thread: threading.Thread | None = None
     watcher_stop: threading.Event | None = None
     # Batch-aware ingest worker
@@ -52,6 +93,7 @@ class AppState:
     ingest_worker: threading.Thread | None = None
 
 
+import json  # noqa: E402
 import queue as _queue_mod  # noqa: E402  (after AppState for type)
 state = AppState()
 
@@ -157,6 +199,14 @@ async def lifespan(app: FastAPI):
     state.library = Library(DATA_ROOT)
     limits.init(DATA_ROOT)
     INBOX_ROOT.mkdir(parents=True, exist_ok=True)
+
+    # Persist state.jobs across restarts. Any prior-run jobs in a non-terminal
+    # state (queued/parsing/synthesizing) didn't survive the worker — we either
+    # finished them on disk (so move to done) or they were genuinely lost (so move
+    # to error). The library is the source of truth: if a doc.json with the
+    # job's doc_id has audio, it's done; otherwise it's a stranded upload.
+    state.jobs.bind(DATA_ROOT / "jobs.json")
+    _reconcile_stale_jobs()
 
     if LOAD_TTS:
         state.ingest_queue = _queue_mod.Queue()
@@ -397,6 +447,47 @@ def _build_audiobook(doc: Document, doc_dir: Path, mp3_path: Path) -> None:
         )
     finally:
         os.unlink(list_path)
+
+
+def _reconcile_stale_jobs() -> None:
+    """Anything still in-flight from a prior process didn't survive the restart.
+    Flip non-terminal jobs to done (if the doc finished on disk) or error."""
+    library = state.library
+    if library is None:
+        return
+    for job_id, j in list(state.jobs.items()):
+        status = j.get("status")
+        if status in ("done", "error"):
+            continue
+        doc_id = j.get("doc_id")
+        user_id = j.get("user_id")
+        project = j.get("project")
+        recovered = None
+        if doc_id and user_id and project:
+            try:
+                doc = library.load_document(user_id, project, doc_id)
+                if doc and doc.total_duration_ms > 0:
+                    recovered = doc
+            except Exception:
+                pass
+        if recovered:
+            state.jobs[job_id] = {
+                "status": "done",
+                "doc_id": recovered.id,
+                "project": project,
+                "filename": j.get("filename"),
+                "user_id": user_id,
+            }
+            log.info("Reconciled job %s -> done (doc was finished on disk)", job_id)
+        else:
+            state.jobs[job_id] = {
+                "status": "error",
+                "message": "Lost on backend restart — please re-upload.",
+                "project": project,
+                "filename": j.get("filename"),
+                "user_id": user_id,
+            }
+            log.info("Reconciled job %s -> error (no finished doc found)", job_id)
 
 
 def _enqueue_ingest(pdf_path: Path, project: str, job_id: str, user_id: str) -> None:
