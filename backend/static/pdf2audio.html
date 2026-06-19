@@ -222,29 +222,56 @@ async function uploadFile(file) {
     j.status = body.status || 'queued';
     jobs.delete(tempId); jobs.set(body.job_id, j);
     renderJob(j);
+    attachStream(j);
   } catch (e) {
     j.status = 'error'; j.message = String(e); renderJob(j);
   }
 }
 
-async function pollOnce() {
-  const pending = [...jobs.values()].filter(j => j.jobId && !['done','error'].includes(j.status));
-  if (!pending.length) return;
-  try {
-    const r = await fetch(api('/api/jobs'), { credentials: 'include' });
-    const all = await r.json();
-    const byId = new Map(all.map(x => [x.job_id, x]));
-    for (const j of pending) {
-      const rem = byId.get(j.jobId);
-      if (!rem) continue;
-      if (rem.status !== j.status || rem.doc_id !== j.doc_id || rem.message !== j.message) {
-        j.status = rem.status; j.doc_id = rem.doc_id; j.message = rem.message; j.project = rem.project || j.project;
+// Push-based status: each in-flight job opens its own EventSource. Replaces the
+// older `setInterval(pollOnce, 4000)` which silently broke whenever /api/jobs
+// returned non-JSON (e.g. a Cloudflare Access redirect) — leaving the badge
+// stuck on whatever was rendered last.
+function attachStream(j) {
+  if (!j.jobId || j.stream) return;
+  if (['done', 'error'].includes(j.status)) return;
+  const url = api(`/api/jobs/${encodeURIComponent(j.jobId)}/events`);
+  const es = new EventSource(url, { withCredentials: true });
+  j.stream = es;
+  es.onmessage = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      const t = String(data.type);
+      if (t === 'parsing' || t === 'parsed' || t === 'synthesizing') {
+        j.status = t;
         renderJob(j);
+      } else if (t === 'done') {
+        j.status = 'done';
+        j.doc_id = data.data?.doc_id || j.doc_id;
+        renderJob(j);
+        es.close(); j.stream = null;
+      } else if (t === 'error') {
+        j.status = 'error';
+        j.message = data.data?.message || 'Processing failed.';
+        renderJob(j);
+        es.close(); j.stream = null;
       }
+    } catch (_) { /* malformed event */ }
+  };
+  es.addEventListener('close', () => { es.close(); j.stream = null; });
+  es.onerror = () => {
+    // Stream broke (auth lapse, server restart, NordVPN cycle, etc.). Visible
+    // failure rather than silent: drop the connection, show a hint, let
+    // bootstrapJobs/reload sort it out. The persisted state.jobs on the server
+    // means /api/jobs will still know what happened on next refresh.
+    es.close(); j.stream = null;
+    if (!['done', 'error'].includes(j.status)) {
+      j.status = 'error';
+      j.message = 'Lost connection to progress stream — refresh to see final status.';
+      renderJob(j);
     }
-  } catch (_) {}
+  };
 }
-setInterval(pollOnce, 4000);
 
 drop.addEventListener('click', () => picker.click());
 drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') picker.click(); });
@@ -312,15 +339,17 @@ async function bootstrapJobs() {
     const all = await r.json();
     for (const rem of all) {
       if (['done', 'error'].includes(rem.status)) continue;
-      jobs.set(rem.job_id, {
+      const j = {
         file: { name: rem.filename || rem.job_id },
         status: rem.status,
         project: rem.project,
         jobId: rem.job_id,
         doc_id: rem.doc_id,
         message: rem.message,
-      });
-      renderJob(jobs.get(rem.job_id));
+      };
+      jobs.set(rem.job_id, j);
+      renderJob(j);
+      attachStream(j); // resume live updates
     }
   } catch (_) {}
 }
